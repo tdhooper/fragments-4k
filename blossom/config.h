@@ -4,7 +4,7 @@
 #define DESPERATE 0
 
 // releasing at Revision? here's a handy toggle for some compo-safe config presets
-#define REVISION_RULESET 0
+#define REVISION_RULESET 1
 
 
 #if _DEBUG
@@ -30,7 +30,7 @@
 
 		#define RENDER_MAX_TIME_MS 30000 // Revision Rules: don't exceed 30 seconds
 
-		#define RENDER_MAX_SAMPLES 256 // customizable, optional
+		#define RENDER_MAX_SAMPLES 1024 // customizable, optional
 
 		#define RENDER_PROGRESSIVE 0 // Revision Rules: no progressive rendering.
 	#else

@@ -229,7 +229,7 @@ float sdCrystalOne(vec3 size, vec3 p) {
     return d;
 }
 
-float sdCrystalLoop(vec3 size, vec3 l, vec3 p) {
+float sdCrystalLoop(vec3 size, vec3 l, vec3 p, float seed) {
 
     p.y = max(p.y, .5 * size.y / l.y);
     
@@ -247,11 +247,11 @@ float sdCrystalLoop(vec3 size, vec3 l, vec3 p) {
         vec3 c = vec3(x, y, z);
         p -= ((c + .5) / l - .5) * size * 2.;
         vec3 sz = size / l;
-        vec3 h3 = hash33(c + 11.);
+        vec3 h3 = hash33(c + 11. + seed);
         //vec3 h3 = hash33(c + 5.);
         //vec3 h3 = hash33(c + 3.);
         p -= (h3 * 2. - 1.) * sz * .5;
-        float m = hash13(c * 10. + 27.);
+        float m = hash13(c * 10. + 27. + seed);
         sz *= mix(.6, 1.5, m);
         sz.xz *= mix(1.8, .45, pow(float(y) / (l.y - 1.), .5));
         float d2 = fBox(p, sz);
@@ -267,7 +267,7 @@ float sdCrystalLoop(vec3 size, vec3 l, vec3 p) {
     }
     }
     
-    d = max(d, -(d + vmin(size / l) * .4));
+    d = max(d, -(d + vmin(size / l) * .5));
     
     return d;
 }
@@ -305,6 +305,7 @@ float sdCrystalLoop2(vec3 size, vec3 l, vec3 p) {
     
     d = max(d, -(d + vmin(size / l) * .5));
     
+    
     return d;
 }
 
@@ -313,9 +314,11 @@ float sdCrystalField(vec3 p) {
 
     float s = .2;
 
-    d = sdCrystalLoop(vec3(.35, 1.6, .35), vec3(2,3,2), pLookUp(p - vec3(.8,0,-.8), vec3(.2,1,-.5), vec3(1,0,1)));
+    d = sdCrystalLoop(vec3(.35, 1.6, .35), vec3(2,3,2), pLookUp(p - vec3(.8,0,-.8), vec3(.2,1,-.5), vec3(1,0,1)), 0.);
     d = smin(d, sdCrystalOne(vec3(.13), pLookUp(p - vec3(1.8,-.15,-.3), vec3(0,1,0), vec3(1,0,-.25))), s);
     d = smin(d, sdCrystalLoop2(vec3(.3, .35, .3), vec3(2,1,2), pLookUp(p - vec3(-.3,0,.5), vec3(-.0,1,.2), vec3(.0,0,1)) - vec3(0,-.2,0)), s);
+
+   d = smin(d, sdCrystalLoop(vec3(.15,1.,.15), vec3(1,3,1), pLookUp(p - vec3(-1.8,-.15,-2.3), vec3(-1,2,-.5), vec3(-1,0,-2)), 11.), s);
 
     return d;
 }
@@ -358,7 +361,7 @@ Model map(vec3 p) {
     //d = smin(d, length(p - vec3(-.3,-.0,.5)) - .5, .0);
     
     float df = pow(d2 + .333, .5) * 1.5;
-    df = d2;
+   // df = d2;
     d += cos(max(df, 0.) * ripple * PI * 2.) * .015;
 
     //float d = length(p) - .7;
@@ -432,6 +435,27 @@ struct Hit {
     vec3 pos;
     float len;
 };
+
+Hit marchX(vec3 origin, vec3 rayDirection, float maxDist, float understep) {
+
+    vec3 rayPosition;
+    float rayLength, dist = 0.;
+    Model model;
+
+    for (int i = 0; i < 200; i++) {
+        rayPosition = origin + rayDirection * rayLength;
+        model = map(rayPosition);
+        rayLength += model.d * understep;
+        
+        if (abs(model.d) / rayLength < .0002) break;
+
+        if (rayLength > maxDist) {
+            model.id = 0;
+            break;
+        }
+    }
+    return Hit(model, rayPosition, rayLength);
+}
 
 
 Hit march(vec3 origin, vec3 rayDir, float maxDist, float understep) {
@@ -553,18 +577,31 @@ vec3 light(vec3 origin, vec3 rayDir) {
 // https://www.shadertoy.com/view/ts2cWm
 // with a bit of demofox's
 // https://www.shadertoy.com/view/WsBBR3
-void main() {
+vec4 draw(vec2 fragCoord) {
 
-
-    vec2 seed = hash22(gl_FragCoord.xy + (float(iFrame)) * sqrt3);
+    vec2 seed = hash22(fragCoord + (float(iFrame)) * sqrt3);
 
     invert = 1.;
     
     envOrientation = sphericalMatrix(((vec2(81.5, 119) / vec2(187)) * 2. - 1.) * 2.);
 
+    //vec2 im = iMouse.xy / iResolution.xy;  
+    //vec3 v = vec3(0,0,1);
+    //pR(v.yz, (.5 - im.y) * PI * 4.);
+    //pR(v.xz, (.5 - im.x) * PI * 4.);
+    //envOrientation = lookAt(v, vec3(0,1,0));
 
-    vec2 p = (-iResolution.xy + 2.* gl_FragCoord.xy) / iResolution.y;
+    //vec2 im = iMouse.xy / iResolution.xy;  
+    //envOrientation = sphericalMatrix(im * PI * 2.);
 
+
+    vec2 p = (-iResolution.xy + 2.* fragCoord) / iResolution.y;
+    
+    //return vec4(-face(p.xy), 0, 1);
+    
+    //p /= 2.;
+
+    
     // jitter for antialiasing
     p += 2. * (seed - .5) / iResolution.xy;
 
@@ -572,9 +609,9 @@ void main() {
 
     float focalLength = 3.;
     vec3 camPos = vec3(0, 0, 1.5) * focalLength;
-    vec3 camTar = vec3(0, 0, .0);
+    vec3 camTar = vec3(0, 0, 0);
     
-    //camPos.xy += rndcircle(seed) * .05;
+    camPos.xy += rndcircle(seed) * .05;
     
     seed = hash22(seed);
     
@@ -585,6 +622,9 @@ void main() {
     
     vec3 rayDir = normalize(camMat * vec3(p.xy, focalLength));
     vec3 origin = camPos;
+    
+	//origin = vec3(0,0,9.5);
+   	//rayDir = normalize(vec3(p * .168, -1.));    
 
     Hit hit = march(origin, rayDir, 6. * focalLength, 1.);
 
@@ -650,23 +690,50 @@ void main() {
             seed = hash22(seed);
             vec3 diffuseRayDir = getSampleBiased(nor, 1., seed);
 
+/*            
+            // calculate direct lighting
+            vec3 lightDir = (sunPos - hit.pos);
+            vec3 lightSampleDir = getConeSample(lightDir, 1e-3, seed);
+            float diffuse = dot(nor, lightSampleDir);
+            vec3 shadowOrigin = hit.pos + nor * (.0002 / abs(dot(lightSampleDir, nor)));
+            if (diffuse > 0.) {
+                Hit sh = march(shadowOrigin, lightSampleDir, 3., 1.);
+                if (sh.model.id == 0) {
+                    col += accum * diffuse * (1./dot(lightDir, lightDir)) * .1;
+                }
+            }
+  */          
+            
+            
+
             rayDir = diffuseRayDir;            
         }
         
         offset = .01 / abs(dot(rayDir, nor));
         origin = hit.pos + offset * rayDir;
     }    
-   
+    
+    //col += env(hit.pos, rayDir) * accum;
     
     if (! spec) {
-        col *= 3.;
+        col *= 2.;
     }
 
-    col *= spectrum(-wavelength+.25);
-
     vec3 fogcol = vec3(.001);
-    col = mix(col, fogcol, saturate(1.0 - exp2(-.0015 * pow(firstHitLen - length(camPos*.5), 3.))));
+   // fogcol = vec3(1,0,0);
+    //bgCol * .15
+    //col = mix(col, fogcol, saturate(1.0 - exp2(-.0015 * pow(firstHitLen - length(camPos*.5), 3.))));
+    col = mix(col, fogcol, saturate(1.0 - exp2(-.0006 * pow(firstHitLen - length(camPos*.666), 5.))));
+
+
+        col *= spectrum(-wavelength+.25);
     
-    gl_FragColor = vec4(col, 1);
+
+    return vec4(col, 1);
+}
+
+
+void main() {
+    gl_FragColor = draw(gl_FragCoord.xy);
 }
 
