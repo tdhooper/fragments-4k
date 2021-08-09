@@ -48,7 +48,7 @@
 	#define CANVAS_WIDTH 3840
 	#define CANVAS_HEIGHT 2160
 
-	#define RENDER_EXACT_SAMPLES 1024
+	#define RENDER_EXACT_SAMPLES 2048
 
 	// which formats to save
 	#define CAPTURE_SAVE_PNG 1

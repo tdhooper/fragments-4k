@@ -8,7 +8,6 @@ layout(location = 1) uniform int iFrame;
 
 /* vvv your shader goes here vvv */
 
-
 #define PI 3.1415926
 
 
@@ -229,13 +228,25 @@ float sdCrystalOne(vec3 size, vec3 p) {
     return d;
 }
 
-float sdCrystalLoop(vec3 size, vec3 l, vec3 p, float seed) {
+float unlerp(float minv, float maxv, float value) {
+  return (value - minv) / (maxv - minv);
+}
+
+
+float sdCrystalLoop(bool usebound, vec3 size, vec3 l, vec3 p, float seed) {
 
     p.y = max(p.y, .5 * size.y / l.y);
     
     p.y -= size.y * .5;
     size.y *= .5;
-    
+
+
+    float bs = 1.;
+    float bound = fBox(p, size * vec3(1.5,1.4,1.5));
+    if (bound > bs) {
+        return bound;
+    }
+   
     vec3 pp = p;
     float d = 1e12;
     
@@ -269,17 +280,25 @@ float sdCrystalLoop(vec3 size, vec3 l, vec3 p, float seed) {
     
     d = max(d, -(d + vmin(size / l) * .5));
     
+    d = mix(d, bound, smoothstep(bs * .8, bs, bound));
+
     return d;
 }
 
 
-float sdCrystalLoop2(vec3 size, vec3 l, vec3 p) {
+float sdCrystalLoop2(bool usebound, vec3 size, vec3 l, vec3 p) {
 
     size *= .9;
     
     p.y -= size.y * .5;
     size.y *= .5;
     
+    float bs = 1.;
+    float bound = fBox(p, size * vec3(1.2,1.8,1.2));
+    if (bound > bs) {
+        return bound;
+    }
+
     vec3 pp = p;
     float d = 1e12;
     
@@ -305,87 +324,52 @@ float sdCrystalLoop2(vec3 size, vec3 l, vec3 p) {
     
     d = max(d, -(d + vmin(size / l) * .5));
     
+    d = mix(d, bound, smoothstep(bs * .8, bs, bound));
     
     return d;
 }
 
-float sdCrystalField(vec3 p) {
+float sdCrystalField(vec3 p, bool usebound) {
     float d = 1e12;
 
     float s = .2;
 
-    d = sdCrystalLoop(vec3(.35, 1.6, .35), vec3(2,3,2), pLookUp(p - vec3(.8,0,-.8), vec3(.2,1,-.5), vec3(1,0,1)), 0.);
+    d = sdCrystalLoop(usebound, vec3(.35, 1.6, .35), vec3(2,3,2), pLookUp(p - vec3(.8,0,-.8), vec3(.2,1,-.5), vec3(1,0,1)), 0.);
     d = smin(d, sdCrystalOne(vec3(.13), pLookUp(p - vec3(1.8,-.15,-.3), vec3(0,1,0), vec3(1,0,-.25))), s);
-    d = smin(d, sdCrystalLoop2(vec3(.3, .35, .3), vec3(2,1,2), pLookUp(p - vec3(-.3,0,.5), vec3(-.0,1,.2), vec3(.0,0,1)) - vec3(0,-.2,0)), s);
+    d = smin(d, sdCrystalLoop2(usebound, vec3(.3, .35, .3), vec3(2,1,2), pLookUp(p - vec3(-.3,0,.5), vec3(-.0,1,.2), vec3(.0,0,1)) - vec3(0,-.2,0)), s);
 
-   d = smin(d, sdCrystalLoop(vec3(.15,1.,.15), vec3(1,3,1), pLookUp(p - vec3(-1.8,-.15,-2.3), vec3(-1,2,-.5), vec3(-1,0,-2)), 11.), s);
+   d = smin(d, sdCrystalLoop(usebound, vec3(.15,1.,.15), vec3(1,3,1), pLookUp(p - vec3(-1.8,-.15,-2.3), vec3(-1,2,-.5), vec3(-1,0,-2)), 11.), s);
 
     return d;
 }
 
 
 Model map(vec3 p) {
-    //p.x = -p.x;
-    
-    // TODO: MOve second outcrop closer
-
+    //vec2 im = iMouse.xy / iResolution.xy;  
+    //im = vec2(.44,.43);
+    //im = vec2(.425,.45);
+   // im = vec2(.44,.45);
+   
     vec2 im = vec2(.43,.43);
     pR(p.yz, (.5 - im.y) * PI);
     pR(p.xz, (.5 - im.x) * PI * 2.5);
     
     p.y += .6;
-    
     p.xz -= vec2(-1,1) * .4;
     
-
-
-    float ripple = 7.;
-    
-
-    //float df = sdCrystalField(vec3(p.x, 0., p.z));
-    //df = max(df, 0.);
-
-    
-    float d2 = sdCrystalField(p);
-
-    //df = smin(df, .5, .05) - .5;
-    
-    //df = smin(df, -fract(p.x * ripple)/ripple, .05);
-    
-    
-    float d = p.y + .25;
-    
+    float d = p.y + .25;    
     d = smin(d, length(p - vec3(.6,-2.5,-.7)) - 2.5, .6);
-    //d = smin(d, length(p - vec3(.6,-.1,-.7)) - .5, .0);
     d = smin(d, length(p - vec3(-.3,-.5,.5)) - .5, .4);
-    //d = smin(d, length(p - vec3(-.3,-.0,.5)) - .5, .0);
-    
+
+    bool usebound = false;
+
+    float d2 = sdCrystalField(p, usebound);
+
     float df = pow(d2 + .333, .5) * 1.5;
-   // df = d2;
+    float ripple = 7.;    
     d += cos(max(df, 0.) * ripple * PI * 2.) * .015;
 
-    //float d = length(p) - .7;
-    //d = 1e12;
-    //vec3(.6,.57,.55)
     Model m = Model(d, p, vec3(3), 3);
-
-    //d2 = max(d2, -(d - .001));
-
-    //p = abs(p);
-    //p -= .5;
-    //float d2 = fBox(p, vec3(.3));
-    
-    
-    
-    //d2 = max(d2, -(d - .001));
-
-    //m.albedo = fract(d2 * 10.) * vec3(1);
-    
-    
-    //d = d2;
-    //d2 = max(d2, -(d - .001));
-    
-    
     Model m2 = Model(d2 * invert, p, vec3(1), 1);
     
     if (m2.d < m.d) {
@@ -434,6 +418,7 @@ struct Hit {
     Model model;
     vec3 pos;
     float len;
+    float steps;
 };
 
 Hit marchX(vec3 origin, vec3 rayDirection, float maxDist, float understep) {
@@ -454,7 +439,7 @@ Hit marchX(vec3 origin, vec3 rayDirection, float maxDist, float understep) {
             break;
         }
     }
-    return Hit(model, rayPosition, rayLength);
+    return Hit(model, rayPosition, rayLength, 0.);
 }
 
 
@@ -465,7 +450,7 @@ Hit march(vec3 origin, vec3 rayDir, float maxDist, float understep) {
     Model model;
     float steps = 0.;
 
-    for (float i = 0.; i < 300.; i++) {
+    for (float i = 0.; i < 100.; i++) {
         len += dist;
         p = origin + len * rayDir;
         model = map(p);
@@ -481,7 +466,7 @@ Hit march(vec3 origin, vec3 rayDir, float maxDist, float understep) {
         }
     }   
 
-    return Hit(model, p, len);
+    return Hit(model, p, len, steps);
 }
 
 // tracing/lighting setup from yx
@@ -626,21 +611,26 @@ vec4 draw(vec2 fragCoord) {
 	//origin = vec3(0,0,9.5);
    	//rayDir = normalize(vec3(p * .168, -1.));    
 
-    Hit hit = march(origin, rayDir, 6. * focalLength, 1.);
+    Hit hit = march(origin, rayDir, 4. * focalLength, 1.);
 
     float firstHitLen = hit.len;
+    
+    float steps = hit.steps;
 
     vec3 nor, ref, raf;
     Material material;
     vec3 accum = vec3(1);
     vec3 bgCol = BGCOL;
 
-    int BOUNCE = hit.model.id == 1 ? 10 : 5;
+    int BOUNCE = 10;
+   //     int BOUNCE = hit.model.id == 1 ? 20 : 10;
+
     
     float wavelength = seed.y;
     float extinctionDist = 0.;
     
     float ior, offset;
+    
     
     bool spec = hit.model.id == 1;
 
@@ -716,11 +706,11 @@ vec4 draw(vec2 fragCoord) {
     //col += env(hit.pos, rayDir) * accum;
     
     if (! spec) {
-        col *= 2.;
+        col *= 1.5;
     }
 
     vec3 fogcol = vec3(.001);
-   // fogcol = vec3(1,0,0);
+    //fogcol = vec3(1,0,0);
     //bgCol * .15
     //col = mix(col, fogcol, saturate(1.0 - exp2(-.0015 * pow(firstHitLen - length(camPos*.5), 3.))));
     col = mix(col, fogcol, saturate(1.0 - exp2(-.0006 * pow(firstHitLen - length(camPos*.666), 5.))));
@@ -728,10 +718,10 @@ vec4 draw(vec2 fragCoord) {
 
         col *= spectrum(-wavelength+.25);
     
+    //col = spectrum(steps*.01);
 
     return vec4(col, 1);
 }
-
 
 void main() {
     gl_FragColor = draw(gl_FragCoord.xy);
