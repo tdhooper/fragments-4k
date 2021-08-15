@@ -38,7 +38,7 @@ vec2 hash22(vec2 p)
 
 const uint k = 1103515245U;  // GLIB C
 
-//https://www.shadertoy.com/view/XlXcW4
+// https://www.shadertoy.com/view/XlXcW4
 vec3 hash33( vec3 xs )
 {
     uvec3 x = uvec3(xs);
@@ -48,59 +48,15 @@ vec3 hash33( vec3 xs )
     return vec3(x)*(1.0/float(0xffffffffU));
 }
 
-/*
-vec3 hash33(vec3 p3)
-{
-	p3 = fract(p3 * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yxz+33.33);
-    return fract((p3.xxy + p3.yxx)*p3.zyx);
-
-}
-*/
-
 float hash13(vec3 p3)
 {
 	return hash33(p3).x;
 }
 
-/*
-float hash13(vec3 p3)
-{
-	p3  = fract(p3 * .1031);
-    p3 += dot(p3, p3.zyx + 31.32);
-    return fract((p3.x + p3.y) * p3.z);
-}
-*/
-
-vec2 rndcircle(vec2 seed) {
-    float a = seed.x * 2. * PI;
-    float r = sqrt(seed.y);
-    return vec2(r * cos(a), r * sin(a));
-}
 
 //========================================================
-// Background
+// Utils
 //========================================================
-
-
-
-vec3 skyTex(vec2 p)
-{   
-
-    return vec3(.2);
-}
-
-
-
-//========================================================
-// Skull
-//========================================================
-
-
-bool dbg;
-
-// Big un-optimised distance function, mekes heavy use
-// of HG_SDF, smooth min, and IQ's accurate ellipse distance
 
 #define saturate(x) clamp(x, 0., 1.)
 
@@ -109,60 +65,14 @@ float smin(float a, float b, float k){
     return (1. - f) * a + f  * b - f * (1. - f) * k;
 }
 
-float smax(float a, float b, float k) {
-    return -smin(-a, -b, k);
-}
-
-float smin2(float a, float b, float r) {
-    vec2 u = max(vec2(r - a,r - b), vec2(0));
-    return max(r, min (a, b)) - length(u);
-}
-
-float smax2(float a, float b, float r) {
-    vec2 u = max(vec2(r + a,r + b), vec2(0));
-    return min(-r, max (a, b)) + length(u);
-}
-
-float smin3(float a, float b, float k){
-    return min(
-        smin(a, b, k),
-        smin2(a, b, k)
-    );
-}
-
-float smax3(float a, float b, float k){
-    return max(
-        smax(a, b, k),
-        smax2(a, b, k)
-    );
-}
-
 void pR(inout vec2 p, float a) {
     p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
 }
 
-// Shortcut for 45-degrees rotation
-void pR45(inout vec2 p) {
-    p = (p + vec2(p.y, -p.x))*sqrt(0.5);
-}
-
-vec3 pRx(vec3 p, float a) {
-    pR(p.yz, a); return p;
-}
-
-vec3 pRy(vec3 p, float a) {
-    pR(p.xz, a); return p;
-}
-
-vec3 pRz(vec3 p, float a) {
-    pR(p.xy, a); return p;
-}
-
-
-
 float vmin(vec3 v) {
     return min(min(v.x, v.y), v.z);
 }
+
 float vmax(vec3 v) {
     return max(max(v.x, v.y), v.z);
 }
@@ -176,37 +86,10 @@ float fBox(vec3 p, vec3 b) {
     return length(max(d, vec3(0))) + vmax(min(d, vec3(0)));
 }
 
-
 float fBox2(vec2 p, vec2 b) {
 	vec2 d = abs(p) - b;
 	return length(max(d, vec2(0))) + vmax2(min(d, vec2(0)));
 }
-
-
-//========================================================
-// Modelling
-//========================================================
-
-struct Material {
-    vec3 albedo;
-    float specular;
-    float roughness;
-};
-
-struct Model {
-    float d;
-    vec3 uvw;
-    vec3 albedo;
-    int id;
-};
-
-Material shadeModel(Model model, inout vec3 nor) {
-    int id = model.id;
-    vec3 p = model.uvw;
-    return Material(model.albedo, 0., 0.);
-}
-
-float invert;
 
 mat3 lookUp(vec3 up, vec3 forward) {
     vec3 ww = normalize(up);
@@ -219,7 +102,27 @@ vec3 pLookUp(vec3 p, vec3 up, vec3 forward) {
     return p * lookUp(up, forward);
 }
 
+vec2 rndcircle(vec2 seed) {
+    float a = seed.x * 2. * PI;
+    float r = sqrt(seed.y);
+    return vec2(r * cos(a), r * sin(a));
+}
 
+float unlerp(float minv, float maxv, float value) {
+  return (value - minv) / (maxv - minv);
+}
+
+
+//========================================================
+// Modelling
+//========================================================
+
+float invert;
+
+struct Model {
+    float d;
+    int id;
+};
 
 float sdCrystalOne(vec3 size, vec3 p) {
     float d = fBox(p, size);
@@ -228,18 +131,12 @@ float sdCrystalOne(vec3 size, vec3 p) {
     return d;
 }
 
-float unlerp(float minv, float maxv, float value) {
-  return (value - minv) / (maxv - minv);
-}
-
-
-float sdCrystalLoop(bool usebound, vec3 size, vec3 l, vec3 p, float seed) {
+float sdCrystalLoop(vec3 size, vec3 l, vec3 p, float seed) {
 
     p.y = max(p.y, .5 * size.y / l.y);
     
     p.y -= size.y * .5;
     size.y *= .5;
-
 
     float bs = 1.;
     float bound = fBox(p, size * vec3(1.5,1.4,1.5));
@@ -250,32 +147,24 @@ float sdCrystalLoop(bool usebound, vec3 size, vec3 l, vec3 p, float seed) {
     vec3 pp = p;
     float d = 1e12;
     
-    
-    for (int x = 0; x < int(l.x); x++) {
-    for (int y = 0; y < int(l.y); y++) {
+    for (int x = 0; x < int(l.x); x++)
+    for (int y = 0; y < int(l.y); y++)
     for (int z = 0; z < int(l.z); z++) {
         p = pp;
         vec3 c = vec3(x, y, z);
         p -= ((c + .5) / l - .5) * size * 2.;
         vec3 sz = size / l;
         vec3 h3 = hash33(c + 11. + seed);
-        //vec3 h3 = hash33(c + 5.);
-        //vec3 h3 = hash33(c + 3.);
         p -= (h3 * 2. - 1.) * sz * .5;
         float m = hash13(c * 10. + 27. + seed);
         sz *= mix(.6, 1.5, m);
         sz.xz *= mix(1.8, .45, pow(float(y) / (l.y - 1.), .5));
         float d2 = fBox(p, sz);
         d2 = max(d2, -abs(p.x));
-        //d2 = max(d2, -abs(p.z));
         if (h3.z > .5 && c.y > 0.) {
             d2 = max(d2, -abs(p.y - (m * 2. - 1.) * sz.y * .5));
         }
-        //d = max(d, -(d2));
-        //d2 = max(d2, -(d2 + vmin(sz) * .5));
         d = min(d, d2);
-    }
-    }
     }
     
     d = max(d, -(d + vmin(size / l) * .5));
@@ -286,7 +175,7 @@ float sdCrystalLoop(bool usebound, vec3 size, vec3 l, vec3 p, float seed) {
 }
 
 
-float sdCrystalLoop2(bool usebound, vec3 size, vec3 l, vec3 p) {
+float sdCrystalLoop2(vec3 size, vec3 l, vec3 p) {
 
     size *= .9;
     
@@ -302,9 +191,8 @@ float sdCrystalLoop2(bool usebound, vec3 size, vec3 l, vec3 p) {
     vec3 pp = p;
     float d = 1e12;
     
-    
-    for (int x = 0; x < int(l.x); x++) {
-    for (int y = 0; y < int(l.y); y++) {
+    for (int x = 0; x < int(l.x); x++)
+    for (int y = 0; y < int(l.y); y++)
     for (int z = 0; z < int(l.z); z++) {
         p = pp;
         vec3 c = vec3(x, y, z);
@@ -319,8 +207,6 @@ float sdCrystalLoop2(bool usebound, vec3 size, vec3 l, vec3 p) {
         d2 = max(d2, -d);
         d = min(d, d2);
     }
-    }
-    }
     
     d = max(d, -(d + vmin(size / l) * .5));
     
@@ -329,27 +215,19 @@ float sdCrystalLoop2(bool usebound, vec3 size, vec3 l, vec3 p) {
     return d;
 }
 
-float sdCrystalField(vec3 p, bool usebound) {
+float sdCrystalField(vec3 p) {
     float d = 1e12;
-
     float s = .2;
-
-    d = sdCrystalLoop(usebound, vec3(.35, 1.6, .35), vec3(2,3,2), pLookUp(p - vec3(.8,0,-.8), vec3(.2,1,-.5), vec3(1,0,1)), 0.);
+    d = sdCrystalLoop(vec3(.35, 1.6, .35), vec3(2,3,2), pLookUp(p - vec3(.8,0,-.8), vec3(.2,1,-.5), vec3(1,0,1)), 0.);
     d = smin(d, sdCrystalOne(vec3(.13), pLookUp(p - vec3(1.8,-.15,-.3), vec3(0,1,0), vec3(1,0,-.25))), s);
-    d = smin(d, sdCrystalLoop2(usebound, vec3(.3, .35, .3), vec3(2,1,2), pLookUp(p - vec3(-.3,0,.5), vec3(-.0,1,.2), vec3(.0,0,1)) - vec3(0,-.2,0)), s);
-
-   d = smin(d, sdCrystalLoop(usebound, vec3(.15,1.,.15), vec3(1,3,1), pLookUp(p - vec3(-1.8,-.15,-2.3), vec3(-1,2,-.5), vec3(-1,0,-2)), 11.), s);
-
+    d = smin(d, sdCrystalLoop2(vec3(.3, .35, .3), vec3(2,1,2), pLookUp(p - vec3(-.3,0,.5), vec3(-.0,1,.2), vec3(.0,0,1)) - vec3(0,-.2,0)), s);
+    d = smin(d, sdCrystalLoop(vec3(.15,1.,.15), vec3(1,3,1), pLookUp(p - vec3(-1.8,-.15,-2.3), vec3(-1,2,-.5), vec3(-1,0,-2)), 11.), s);
     return d;
 }
 
 
 Model map(vec3 p) {
-    //vec2 im = iMouse.xy / iResolution.xy;  
-    //im = vec2(.44,.43);
-    //im = vec2(.425,.45);
-   // im = vec2(.44,.45);
-   
+    //vec2 im = iMouse.xy / iResolution.xy;     
     vec2 im = vec2(.43,.43);
     pR(p.yz, (.5 - im.y) * PI);
     pR(p.xz, (.5 - im.x) * PI * 2.5);
@@ -361,23 +239,19 @@ Model map(vec3 p) {
     d = smin(d, length(p - vec3(.6,-2.5,-.7)) - 2.5, .6);
     d = smin(d, length(p - vec3(-.3,-.5,.5)) - .5, .4);
 
-    bool usebound = false;
-
-    float d2 = sdCrystalField(p, usebound);
+    float d2 = sdCrystalField(p);
 
     float df = pow(d2 + .333, .5) * 1.5;
     float ripple = 7.;    
     d += cos(max(df, 0.) * ripple * PI * 2.) * .015;
 
-    Model m = Model(d, p, vec3(3), 3);
-    Model m2 = Model(d2 * invert, p, vec3(1), 1);
+    Model m = Model(d, 2);
+    Model m2 = Model(d2 * invert, 1);
     
     if (m2.d < m.d) {
         m = m2;
     }
-    
-    //m = m2;
-    
+
     return m;
 }
 
@@ -387,7 +261,6 @@ Model map(vec3 p) {
 //========================================================
 
 const float sqrt3 = 1.7320508075688772;
-
 
 // http://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
 vec3 calcNormal( in vec3 pos )
@@ -401,61 +274,23 @@ vec3 calcNormal( in vec3 pos )
     return normalize(n);
 }
 
-vec3 sunPos = normalize(vec3(5,2,2)) * 2.;
-
-/*
-vec3 env(vec3 dir) {
-    vec3 col = mix(vec3(.5,.7,1) * .05, vec3(.5,.7,1) * 1., smoothstep(-.4, .4, dir.y));
-    vec2 pc = vec2(atan(dir.z, dir.x), dir.y) * 30. - 28.96 * 10.;
-    vec3 cl = skyTex(pc);
-    col *= cl;
-    col += pow(cl, vec3(15.)) * 2.;
-    return col;
-}
-*/
-
 struct Hit {
     Model model;
     vec3 pos;
     float len;
-    float steps;
 };
 
-Hit marchX(vec3 origin, vec3 rayDirection, float maxDist, float understep) {
-
-    vec3 rayPosition;
-    float rayLength, dist = 0.;
-    Model model;
-
-    for (int i = 0; i < 200; i++) {
-        rayPosition = origin + rayDirection * rayLength;
-        model = map(rayPosition);
-        rayLength += model.d * understep;
-        
-        if (abs(model.d) / rayLength < .0002) break;
-
-        if (rayLength > maxDist) {
-            model.id = 0;
-            break;
-        }
-    }
-    return Hit(model, rayPosition, rayLength, 0.);
-}
-
-
-Hit march(vec3 origin, vec3 rayDir, float maxDist, float understep) {
+Hit march(vec3 origin, vec3 rayDir, float maxDist) {
     vec3 p;
     float len = 0.;
     float dist = 0.;
     Model model;
-    float steps = 0.;
 
     for (float i = 0.; i < 100.; i++) {
         len += dist;
         p = origin + len * rayDir;
         model = map(p);
         dist = model.d;
-        steps += 1.;
         if (abs(model.d) / len < .0002) {
             break;
         }
@@ -466,7 +301,7 @@ Hit march(vec3 origin, vec3 rayDir, float maxDist, float understep) {
         }
     }   
 
-    return Hit(model, p, len, steps);
+    return Hit(model, p, len);
 }
 
 // tracing/lighting setup from yx
@@ -501,11 +336,6 @@ vec3 getConeSample(vec3 dir, float extent, vec2 seed) {
 	return cos(r.x)*oneminus*o1+sin(r.x)*oneminus*o2+r.y*dir;
 }
 
-vec3 BGCOL = vec3(.9,.83,1);
-
-
-
-
 float intersectPlane(vec3 rOrigin, vec3 rayDir, vec3 origin, vec3 normal, vec3 up, out vec2 uv) {
     float d = dot(normal, (origin - rOrigin)) / dot(rayDir, normal);
   	vec3 point = rOrigin + d * rayDir;
@@ -530,17 +360,9 @@ mat3 sphericalMatrix(vec2 tp) {
     );
 }
 
-
 mat3 envOrientation;
 
 vec3 light(vec3 origin, vec3 rayDir) {
-
-    //vec2 im = iMouse.xy / iResolution.xy;  
-    //pR(sunPos.yz, (.5 - im.y) * PI);
-    //pR(sunPos.xz, (.5 - im.x) * PI * 2.5);
-
-   // float d = dot(normalize(sunPos - origin), rayDir);
-   // return step(.9, d) * vec3(.5);
 
     origin = -origin;
     rayDir = -rayDir;
@@ -554,14 +376,11 @@ vec3 light(vec3 origin, vec3 rayDir) {
     float l = smoothstep(.75, .0, fBox2(uv, vec2(.5,2)) - 1.);
     l *= smoothstep(6., 0., length(uv));
 	return vec3(l) * hit * 2.;
-
 }
 
+float Luma(vec3 color) { return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
 
-// main path tracing loop, based on yx's
-// https://www.shadertoy.com/view/ts2cWm
-// with a bit of demofox's
-// https://www.shadertoy.com/view/WsBBR3
+
 vec4 draw(vec2 fragCoord) {
 
     vec2 seed = hash22(fragCoord + (float(iFrame)) * sqrt3);
@@ -570,94 +389,54 @@ vec4 draw(vec2 fragCoord) {
     
     envOrientation = sphericalMatrix(((vec2(81.5, 119) / vec2(187)) * 2. - 1.) * 2.);
 
-    //vec2 im = iMouse.xy / iResolution.xy;  
-    //vec3 v = vec3(0,0,1);
-    //pR(v.yz, (.5 - im.y) * PI * 4.);
-    //pR(v.xz, (.5 - im.x) * PI * 4.);
-    //envOrientation = lookAt(v, vec3(0,1,0));
-
-    //vec2 im = iMouse.xy / iResolution.xy;  
-    //envOrientation = sphericalMatrix(im * PI * 2.);
-
-
     vec2 p = (-iResolution.xy + 2.* fragCoord) / iResolution.y;
-    
-    //return vec4(-face(p.xy), 0, 1);
-    
-    //p /= 2.;
-
     
     // jitter for antialiasing
     p += 2. * (seed - .5) / iResolution.xy;
-
-    vec3 col = vec3(0);
 
     float focalLength = 3.;
     vec3 camPos = vec3(0, 0, 1.5) * focalLength;
     vec3 camTar = vec3(0, 0, 0);
     
+    // DOF
     camPos.xy += rndcircle(seed) * .05;
-    
     seed = hash22(seed);
     
     vec3 ww = normalize(camTar - camPos);
     vec3 uu = normalize(cross(vec3(0,1,0),ww));
     vec3 vv = normalize(cross(ww,uu));
     mat3 camMat = mat3(-uu, vv, ww);
-    
+
     vec3 rayDir = normalize(camMat * vec3(p.xy, focalLength));
     vec3 origin = camPos;
     
-	//origin = vec3(0,0,9.5);
-   	//rayDir = normalize(vec3(p * .168, -1.));    
-
-    Hit hit = march(origin, rayDir, 4. * focalLength, 1.);
+    Hit hit = march(origin, rayDir, 4. * focalLength);
 
     float firstHitLen = hit.len;
+    bool isFloor = hit.model.id == 2;
     
-    float steps = hit.steps;
-
-    vec3 nor, ref, raf;
-    Material material;
-    vec3 accum = vec3(1);
-    vec3 bgCol = BGCOL;
-
-    int BOUNCE = 10;
-   //     int BOUNCE = hit.model.id == 1 ? 20 : 10;
-
-    
-    float wavelength = seed.y;
-    float extinctionDist = 0.;
-    
+    vec3 nor, ref, raf; 
     float ior, offset;
     
-    
-    bool spec = hit.model.id == 1;
+    float wavelength = seed.y;
+    vec3 col = vec3(0);    
 
-    for (int bounce = 0; bounce < BOUNCE; bounce++) {
+    for (int bounce = 0; bounce < 10; bounce++) {
    
         if (bounce > 0) {
            seed = hash22(seed);
-           hit = march(origin, rayDir, 6., 1.);
+           hit = march(origin, rayDir, 6.);
         }
         
-        if (invert < 0.) {
-            extinctionDist += hit.len;
-        }
-
         if (hit.model.id == 0) {
             break;
         }
 
         nor = calcNormal(hit.pos);
         
-        material = shadeModel(hit.model, nor);
-
-        // update the colorMultiplier
-       	accum *= material.albedo;
-
-
         if (hit.model.id == 1) {
+            
+            // Reflective bounce
             
             ref = reflect(rayDir, nor);
             
@@ -676,49 +455,26 @@ vec4 draw(vec2 fragCoord) {
             
         } else {
             
-            // Calculate diffuse ray direction
+            // Diffuse bounce
+            
             seed = hash22(seed);
-            vec3 diffuseRayDir = getSampleBiased(nor, 1., seed);
-
-/*            
-            // calculate direct lighting
-            vec3 lightDir = (sunPos - hit.pos);
-            vec3 lightSampleDir = getConeSample(lightDir, 1e-3, seed);
-            float diffuse = dot(nor, lightSampleDir);
-            vec3 shadowOrigin = hit.pos + nor * (.0002 / abs(dot(lightSampleDir, nor)));
-            if (diffuse > 0.) {
-                Hit sh = march(shadowOrigin, lightSampleDir, 3., 1.);
-                if (sh.model.id == 0) {
-                    col += accum * diffuse * (1./dot(lightDir, lightDir)) * .1;
-                }
-            }
-  */          
-            
-            
-
-            rayDir = diffuseRayDir;            
+            rayDir = getSampleBiased(nor, 1., seed);            
+ 
         }
         
         offset = .01 / abs(dot(rayDir, nor));
         origin = hit.pos + offset * rayDir;
     }    
     
-    //col += env(hit.pos, rayDir) * accum;
-    
-    if (! spec) {
-        col *= 1.5;
+    if (isFloor) {
+        col *= 2.;
     }
 
-    vec3 fogcol = vec3(.001);
-    //fogcol = vec3(1,0,0);
-    //bgCol * .15
-    //col = mix(col, fogcol, saturate(1.0 - exp2(-.0015 * pow(firstHitLen - length(camPos*.5), 3.))));
+    vec3 fogcol = vec3(.0);
     col = mix(col, fogcol, saturate(1.0 - exp2(-.0006 * pow(firstHitLen - length(camPos*.666), 5.))));
 
-
-        col *= spectrum(-wavelength+.25);
-    
-    //col = spectrum(steps*.01);
+    // Dispersion
+    col *= spectrum(-wavelength+.30);
 
     return vec4(col, 1);
 }
